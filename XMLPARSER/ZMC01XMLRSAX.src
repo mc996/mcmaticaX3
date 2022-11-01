@@ -27,12 +27,6 @@ End 999
 
 
 
-
-Subprog DESTROY()
-
-End
-
-
 #**
 #* Main subprog
 #*
@@ -184,7 +178,15 @@ $JUMP_NEXT
     Endif
 End
 
-#==================================================
+#**
+#* Raise the START ELEMENT event
+#*
+#* @param PEVENTHANDLER
+#* @param PURI
+#* @param PELEMENT
+#* @param PCOUNT
+#* @param PSTOP
+#*!
 Subprog RAISE_START_ELEMENT(PEVENTHANDLER, PURI,PELEMENT, PCOUNT, PSTOP)
 Value Char PEVENTHANDLER
 Value Char PURI
@@ -197,7 +199,16 @@ Variable Integer PSTOP
 End
 
 
-#==================================================
+#**
+#* Raise the END ELEMENT event
+#*
+#* @param PEVENTHANDLER
+#* @param PURI
+#* @param PELEMENT
+#* @param PVALUE_CLB
+#* @param PCOUNT
+#* @param PSTOP
+#*!
 Subprog RAISE_END_ELEMENT(PEVENTHANDLER, PURI, PELEMENT, PVALUE_CLB, PCOUNT, PSTOP)
 Value Char PEVENTHANDLER
 Value Char PURI
@@ -215,10 +226,19 @@ End
 
 
 
+#===========================================================
+#Internal utilities and functions
+#-----------------------------------------------------------
 
 
-
-
+#**
+#* Append the currente element to the tree
+#*
+#* @param WELEMENTTREE
+#* @param WELECOUNTER
+#* @param YCURRELEMENT
+#* @param WCOUNT
+#*!
 Subprog APPEND_T0_TREEELEMENT(WELEMENTTREE, WELECOUNTER, YCURRELEMENT, WCOUNT)
 Variable Char WELEMENTTREE
 Variable Char WELECOUNTER
@@ -230,15 +250,20 @@ Variable Integer WCOUNT
         I+=1
     Until vireblc(WELEMENTTREE(I),4) = ""
     WELEMENTTREE(I) = YCURRELEMENT
-    If instr (1, YCURRELEMENT, 'CDATA') : Raz YCURRELEMENT : Endif  ##coldo 071119
-    ##########Infbox YCURRELEMENT +' ycurelement'   ##coldo 071119
-    If instr (1, WELEMENTTREE(I), 'CDATA') : Raz WELEMENTTREE(I) : Endif  ##coldo 071119
-    ##########Infbox WELEMENTTREE(I) + ' elementre'
+    If instr (1, YCURRELEMENT, 'CDATA') : Raz YCURRELEMENT : Endif
+    If instr (1, WELEMENTTREE(I), 'CDATA') : Raz WELEMENTTREE(I) : Endif
     Call UPDATECOUNTER(WELEMENTTREE, WELECOUNTER, WCOUNT)
-    #WELEMENTTREE(I) += "~" + num$(WCOUNT)
 
 End
 
+
+#**
+#* Remove the element from the tree
+#*
+#* @param WELEMENTTREE
+#* @param YCURRELEMENT
+#* @param WERRMSG
+#*!
 Subprog REMOVE_FROM_TREEELEMENT(WELEMENTTREE, YCURRELEMENT, WERRMSG)
 Variable Char WELEMENTTREE
 Value Char YCURRELEMENT
@@ -251,13 +276,15 @@ Variable Char WERRMSG
     If func GETELEMENTNAME(WELEMENTTREE(I)) = YCURRELEMENT Then
         Raz WELEMENTTREE(I)
     Else
-
-#        Call ERREUR("Element '" + YCURRELEMENT + "' not closed correctly") From GESECRAN
         WERRMSG = "Element '" + YCURRELEMENT + "' not closed correctly"
-
     Endif
 End
 
+#**
+#* Returns the las index of the tree
+#*
+#* @param WELEMENTTREE
+#*!
 Funprog LASTINDEX(WELEMENTTREE)
 Value Char WELEMENTTREE
 
@@ -271,7 +298,13 @@ Value Char WELEMENTTREE
 
 End I
 
-
+#**
+#* Set the count variable of the element
+#*
+#* @param WELEMENTTREE
+#* @param WELECOUNTER
+#* @param WCOUNT
+#*!
 Subprog UPDATECOUNTER(WELEMENTTREE, WELECOUNTER, WCOUNT)
 Variable Char WELEMENTTREE
 Variable Char WELECOUNTER
@@ -282,8 +315,6 @@ Variable Integer WCOUNT
     Local Char CURRELEMENT(250)
     Local Shortint TROVATO : Raz TROVATO
     While WELECOUNTER(I,0)<>""
-
-
         TROVATO =1
         J = 0
         While WELEMENTTREE(J) <> ""
@@ -295,7 +326,6 @@ Variable Integer WCOUNT
             If J >= dim(WELEMENTTREE)  Then
                 Break
             Endif
-
         Wend
         If TROVATO = 1 Then
             If WELECOUNTER(I, J) = "" Then
@@ -320,7 +350,12 @@ Variable Integer WCOUNT
     Endif
 End
 
-
+#**
+#* Returns the counter number of the element
+#*
+#* @param WELEMENTTREE
+#* @param WELECOUNTER
+#*!
 Funprog COUNT_ELEMENT(WELEMENTTREE, WELECOUNTER)
 Variable Char WELEMENTTREE
 Variable Char WELECOUNTER
@@ -356,7 +391,11 @@ Variable Char WELECOUNTER
 
 End RESULT
 
-
+#**
+#* Returns the name of the element after removing some special characters
+#*
+#* @param YELEMENT
+#*!
 Funprog GETELEMENTNAME(YELEMENT)
 Value Char YELEMENT
     Local Char RESULT(250) : RESULT = YELEMENT
@@ -370,6 +409,15 @@ Value Char YELEMENT
 
 End RESULT
 
+#**
+#* Internal Subprog to compose an error string
+#*
+#* @param TRTLIN
+#* @param I
+#* @param YNOL
+#* @param YCH
+#* @param WERRMSG
+#*!
 Subprog FILLERROR(TRTLIN, I, YNOL, YCH, WERRMSG)
 Value Integer TRTLIN
 Value Integer I
@@ -379,12 +427,16 @@ Variable Char WERRMSG
     WERRMSG = "("+num$(TRTLIN)+")"-"PARSING error at position " + num$(I) + " line: " + num$(YNOL) + " invalid character: " + YCH
 End
 
-#========================================
+#**
+#* Convert a string  date with the mask YYYY-MM-DD to a date
+#*
+#* @param YXMLDATE
+#*!
 Funprog XMLDATE2DATE(YXMLDATE)
 Value Char YXMLDATE
     Local Date RESULT
 
-    #Formato in input: YYYY-MM-DD
+    #Input format: YYYY-MM-DD
     Local Char RESULT(10)(99)
     Local Integer I
     I = func F_SPLIT(YXMLDATE,"-",RESULT)
@@ -392,11 +444,17 @@ Value Char YXMLDATE
 End gdat$(val(RESULT(2)),val(RESULT(1)),val(RESULT(0)))
 
 
-#========================================
+#**
+#* Split a string into an array of string
+#*
+#* @param PPSTR Initial complete string to split
+#* @param PDELIMITER string delimiter
+#* @param XXTMP Output array
+#*!
 Funprog F_SPLIT(PPSTR,PDELIMITER,XXTMP)
-Value Char PPSTR        #Stringa da splittare
-Value Char PDELIMITER   #Separatore
-Variable Char XXTMP     #Array de lrisultato
+Value Char PPSTR
+Value Char PDELIMITER
+Variable Char XXTMP
 
     Local Integer XCONTA
     Local Integer XSTART
@@ -421,7 +479,11 @@ Variable Char XXTMP     #Array de lrisultato
 End XCONTA
 
 
-#========================================
+#**
+#* Evaluate if it is a valid number
+#*
+#* @param PVALUE
+#*!
 Funprog IS_VALID_NUMBER(PVALUE)
 Value Char PVALUE
   Local Shortint RESULT : RESULT = 1 # 1 = OK, true
@@ -453,7 +515,11 @@ Value Char PVALUE
   If YNUMPUNTI > 1 Then RESULT = 0 : Endif #Se per errori ci sono +2 caratteri .
 End RESULT
 
-#========================================
+#**
+#* Evaluate if it is a valid integer
+#*
+#* @param PVALUE
+#*!
 Funprog IS_VALID_INTEGER(PVALUE)
 Value Char PVALUE
   Local Shortint RESULT : RESULT = 1 # 1 = OK, true
@@ -471,7 +537,11 @@ Value Char PVALUE
 
 End RESULT
 
-#========================================
+#**
+#* Evaluate if it is a valid date
+#*
+#* @param PVALUE
+#*!
 Funprog IS_VALID_DATE(PVALUE)
 Value Char PVALUE
   Local Shortint RESULT : RESULT = 1 # 1 = OK, true
@@ -486,11 +556,17 @@ End RESULT
 
 
 
-#========================================
+#**
+#* Replace a string with another in a Char variable
+#*
+#* @param PPST1 Original complete clob text
+#* @param PPST2 Old string to be replaced
+#* @param PPST3 New string
+#*!
 Funprog F_REPLACEALL(PPST1,PPST2,PPST3)
-Value Char PPST1() #Stringa origine
-Value Char PPST2() #Stringa da sostituire
-Value Char PPST3() #Nuova stringa
+Value Char PPST1()
+Value Char PPST2()
+Value Char PPST3()
   Local Char X_RET(254)
   Local Integer XXINI, XXEND
   Local Integer XSSS : XSSS= 0
@@ -505,11 +581,17 @@ Value Char PPST3() #Nuova stringa
   Wend
 End X_RET
 
-
+#**
+#* Replace a string with another in a Clobfile variable
+#*
+#* @param PPST1 Original complete clob text
+#* @param PPST2 Old string to be replaced
+#* @param PPST3 New string
+#*!
 Subprog REPLACEALL_CLBL(PPST1,PPST2,PPST3)
-Variable Clbfile PPST1() #Stringa origine
-Value Char PPST2() #Stringa da sostituire
-Value Char PPST3() #Nuova stringa
+Variable Clbfile PPST1()
+Value Char PPST2()
+Value Char PPST3()
 
   Local Integer XXINI, XXEND
   Local Integer XSSS : XSSS= 0
@@ -523,7 +605,11 @@ Value Char PPST3() #Nuova stringa
   Wend
 End
 
-
+#**
+#* Returns the date of the file
+#*
+#* @param PFILEPATH
+#*!
 Funprog GET_DATA_FILE(PFILEPATH)
 Value Char PFILEPATH
   Local Integer RESULT, DAYS
