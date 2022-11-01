@@ -1,0 +1,534 @@
+###############################################################################
+#                            CORE PROCEDURES subprog read and parse an XML file
+#
+# Author: Matteo Carminati (mcarminati@mcmatica.it) 2022
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms version 3 of the GNU General Public License as published
+# by the Free Software Foundation. This program is distributed in the hope
+# that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+################################################################################
+#
+
+#**
+#* max sublevels of elemets managed
+#*!
+Funprog F_DEEPLEVEL()
+End 99
+
+#**
+#* max numbers of different elements managed
+#*!
+Funprog F_MAXELEMENT()
+End 999
+
+
+
+
+Subprog DESTROY()
+
+End
+
+
+#**
+#* Main subprog
+#*
+#* @param PPATH XML file path
+#* @param PEVENTHANDLER name of the source program that manage the parsed elemets
+#* @param WERRMSG Returning error messages
+#*!
+Subprog XMLPARSE(PPATH, PEVENTHANDLER, WERRMSG)
+Value Char PPATH
+Value Char PEVENTHANDLER
+Variable Char WERRMSG
+
+
+  [S]maxmem = 64000000
+
+
+  Local Clbfile YDOC(14)
+
+  Openi PPATH Using [FXML]
+
+  Iomode adxirs ""  Using [FXML]
+  Iomode adxifs ""  Using [FXML]
+  Iomode adxium 50  Using [FXML]
+
+  Local Integer YCONTA
+
+  Repeat
+    Rdseq YDOC Using [FXML]    #Load entire file into clob
+    YCONTA += 1
+  Until fstat <> 0
+
+  If YCONTA>1 Then
+    WERRMSG = "File troppo grande (YCONTA:" + num$(YCONTA) + ")"
+  Else
+    #replace the line feed and the carriage return with a space
+    YDOC = ctrans(YDOC,chr$(10)," ")# Put a space char
+    YDOC = ctrans(YDOC,chr$(13),"")
+
+    Call XMLPARSE_CLB(YDOC, PEVENTHANDLER, [V]CST_ANO, WERRMSG)
+  Endif
+
+  Openi Using [FXML]
+
+End
+
+#**
+#* Inner main program
+#*
+#* @param YDOC Clob file
+#* @param PEVENTHANDLER name of the source program that manage the parsed elemets
+#* @param PPROGRESS Show/Hide progress
+#* @param WERRMSG Returning error messages
+#*!
+Subprog XMLPARSE_CLB(YDOC, PEVENTHANDLER, PPROGRESS, WERRMSG)
+Variable Clbfile YDOC
+Value Char PEVENTHANDLER
+Value Integer PPROGRESS
+Variable Char WERRMSG
+
+    Local Char YCURRELM(250)
+    Local Char YCURRELM_END(250)
+    Local Clbfile YCURRVAL(12)    #tag contents
+    Local Integer INTERRUPT
+    Local Integer YSTOP
+
+
+    If PPROGRESS = [V]CST_AYES Then
+      Call OUVRE_BOITE("XML Parsing ", len(YDOC)) From GESECRAN : # Set Progress Bar
+      Call SET_BOITE("XML Parsing",len(YDOC)) From GESECRAN
+    Endif
+
+    Local Char YELEMENTTREE(250)(0..func F_DEEPLEVEL() )
+    Local Char YELECOUNTER(250)(func F_MAXELEMENT(), func F_DEEPLEVEL() + 1) #matrice, 0 -> massima profondita albero, nomi elementi, + 1 -> contatore elementi
+
+
+    Local Integer YPB, YPE, YPE2
+    Repeat
+        YPB = instr(YPB,YDOC,"<")
+        If YPB > 0  Then
+
+            YPB += 1
+
+            If mid$(YDOC,YPB,1) = "!" Then   #Contenuto TAG con <![CDATA[
+              Goto JUMP_NEXT
+            Endif
+
+            If mid$(YDOC,YPB,1)="/" Then
+               YCURRVAL = mid$(YDOC, YPE+2,YPB-YPE-3)
+                Call REPLACEALL_CLBL(YCURRVAL,']]>','')
+                Call REPLACEALL_CLBL(YCURRVAL, '<![CDATA[','')
+            Endif
+
+            If instr(YPB+1,YDOC," ") > 0 Then
+                YPE = min( instr(YPB+1,YDOC," "), instr(YPB+1,YDOC,">"))-1
+
+            Else
+                YPE = instr(YPB+1,YDOC,">")-1
+            Endif
+
+            YPE2 = instr(YPB+1,YDOC,">")
+
+            If instr(YPB+1,YDOC,"<") > 0 and instr(YPB+1,YDOC,"<") < YPE Then
+                Call FILLERROR(66, instr(YPB+1,YDOC,"<"), 0, "<", WERRMSG)
+                Break
+            Endif
+
+            If mid$(YDOC, YPE2-1,2)="/>" Then
+                Goto JUMP_NEXT            #Esclude i tag senza tag di chiusura
+            Endif
+
+            If mid$(YDOC,YPB,1)="/" Then
+                YCURRELM_END = mid$(YDOC,YPB+1,YPE-YPB)            ###YCURRELM = nome del rag
+
+                If left$(YCURRELM_END,1)<>"?" Then
+                    Raz YCOUNT
+                    YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
+                    Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURRELM_END, YCURRVAL, YCOUNT, YSTOP )
+                    If YSTOP = 1 Then
+                        Break
+                    Endif
+                    Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURRELM_END, WERRMSG)
+                Endif
+                If vireblc(WERRMSG,2) <> "" Then
+                    Break
+                Endif
+            Else
+                YCURRELM = mid$(YDOC,YPB,YPE-YPB+1)
+                If left$(YCURRELM,1)<>"?" Then
+                    Local Integer YCOUNT
+
+                    Call APPEND_T0_TREEELEMENT(YELEMENTTREE, YELECOUNTER, YCURRELM, YCOUNT)
+                    Call RAISE_START_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURRELM, YCOUNT, YSTOP)
+                    If YSTOP = 1 Then
+                        Break
+                    Endif
+
+                Endif
+            Endif
+
+        Endif
+        If PPROGRESS = [V]CST_AYES Then
+          Call AFF_BOITE("Element: "-num$(YCURRELM),YPB,INTERRUPT) From GESECRAN
+        Endif
+
+$JUMP_NEXT
+    Until YPB <= 0 or YPE >= len(YDOC) -1 or INTERRUPT=1
+    If PPROGRESS = [V]CST_AYES Then
+      Call FERME_BOITE From GESECRAN
+    Endif
+End
+
+#==================================================
+Subprog RAISE_START_ELEMENT(PEVENTHANDLER, PURI,PELEMENT, PCOUNT, PSTOP)
+Value Char PEVENTHANDLER
+Value Char PURI
+Value Char PELEMENT
+Value Integer PCOUNT
+Variable Integer PSTOP
+
+    Local Char YEVENT(20) : YEVENT = "START_ELEMENT"
+    Gosub YPARSING From =PEVENTHANDLER
+End
+
+
+#==================================================
+Subprog RAISE_END_ELEMENT(PEVENTHANDLER, PURI, PELEMENT, PVALUE_CLB, PCOUNT, PSTOP)
+Value Char PEVENTHANDLER
+Value Char PURI
+Value Char PELEMENT
+Variable Clbfile PVALUE_CLB
+Value Integer PCOUNT
+Variable Integer PSTOP
+
+    Local Char YEVENT(20) : YEVENT = "END_ELEMENT"
+
+    Local Char PVALUE(254) : PVALUE = PVALUE_CLB
+
+    Gosub YPARSING From =PEVENTHANDLER
+End
+
+
+
+
+
+
+
+Subprog APPEND_T0_TREEELEMENT(WELEMENTTREE, WELECOUNTER, YCURRELEMENT, WCOUNT)
+Variable Char WELEMENTTREE
+Variable Char WELECOUNTER
+Value Char YCURRELEMENT
+Variable Integer WCOUNT
+
+    Local Integer I: I = -1
+    Repeat
+        I+=1
+    Until vireblc(WELEMENTTREE(I),4) = ""
+    WELEMENTTREE(I) = YCURRELEMENT
+    If instr (1, YCURRELEMENT, 'CDATA') : Raz YCURRELEMENT : Endif  ##coldo 071119
+    ##########Infbox YCURRELEMENT +' ycurelement'   ##coldo 071119
+    If instr (1, WELEMENTTREE(I), 'CDATA') : Raz WELEMENTTREE(I) : Endif  ##coldo 071119
+    ##########Infbox WELEMENTTREE(I) + ' elementre'
+    Call UPDATECOUNTER(WELEMENTTREE, WELECOUNTER, WCOUNT)
+    #WELEMENTTREE(I) += "~" + num$(WCOUNT)
+
+End
+
+Subprog REMOVE_FROM_TREEELEMENT(WELEMENTTREE, YCURRELEMENT, WERRMSG)
+Variable Char WELEMENTTREE
+Value Char YCURRELEMENT
+Variable Char WERRMSG
+
+    Local Integer I: I = 0
+
+    I = func LASTINDEX(WELEMENTTREE)
+
+    If func GETELEMENTNAME(WELEMENTTREE(I)) = YCURRELEMENT Then
+        Raz WELEMENTTREE(I)
+    Else
+
+#        Call ERREUR("Element '" + YCURRELEMENT + "' not closed correctly") From GESECRAN
+        WERRMSG = "Element '" + YCURRELEMENT + "' not closed correctly"
+
+    Endif
+End
+
+Funprog LASTINDEX(WELEMENTTREE)
+Value Char WELEMENTTREE
+
+    Local Integer I: I = 0
+    While WELEMENTTREE(I) <> ""
+        I+=1
+    Wend
+    If I >= 1 Then
+        I -= 1
+    Endif
+
+End I
+
+
+Subprog UPDATECOUNTER(WELEMENTTREE, WELECOUNTER, WCOUNT)
+Variable Char WELEMENTTREE
+Variable Char WELECOUNTER
+Variable Integer WCOUNT
+
+    Local Integer I: I = 0
+    Local Integer J
+    Local Char CURRELEMENT(250)
+    Local Shortint TROVATO : Raz TROVATO
+    While WELECOUNTER(I,0)<>""
+
+
+        TROVATO =1
+        J = 0
+        While WELEMENTTREE(J) <> ""
+            If WELEMENTTREE(J) <> WELECOUNTER(I, J) Then
+                Raz TROVATO
+                Break
+            Endif
+            J+=1
+            If J >= dim(WELEMENTTREE)  Then
+                Break
+            Endif
+
+        Wend
+        If TROVATO = 1 Then
+            If WELECOUNTER(I, J) = "" Then
+                WCOUNT = val(WELECOUNTER(I, func F_DEEPLEVEL())) + 1
+                WELECOUNTER(I, func F_DEEPLEVEL()) = num$(WCOUNT)
+                End
+            Else
+
+            Endif
+        Endif
+        I+=1
+    Wend
+
+    If TROVATO <> 1 Then
+        J=0
+        While WELEMENTTREE(J) <> ""
+            WELECOUNTER(I, J) = WELEMENTTREE(J) #CURRELEMENT
+            J+=1
+        Wend
+        WCOUNT = 1
+        WELECOUNTER(I, func F_DEEPLEVEL()) = num$(WCOUNT)
+    Endif
+End
+
+
+Funprog COUNT_ELEMENT(WELEMENTTREE, WELECOUNTER)
+Variable Char WELEMENTTREE
+Variable Char WELECOUNTER
+
+
+
+    Local Integer I: I = 0
+    Local Integer J
+    Local Integer RESULT : RESULT = 0
+    Local Char CURRELEMENT(250)
+    Local Shortint TROVATO : Raz TROVATO
+    Repeat
+        TROVATO =1
+        J = 0
+        While WELEMENTTREE(J) <> ""
+            If WELEMENTTREE(J) <> WELECOUNTER(I, J) Then
+                Raz TROVATO
+                Break
+            Endif
+            J+=1
+            If J >= dim(WELEMENTTREE)  Then
+                Break
+            Endif
+        Wend
+        If TROVATO = 1 Then
+            If WELECOUNTER(I, J) = "" Then
+                RESULT = val(WELECOUNTER(I, func F_DEEPLEVEL()))
+
+            Endif
+        Endif
+        I+=1
+    Until WELECOUNTER(I,0) = "" | RESULT > 0
+
+End RESULT
+
+
+Funprog GETELEMENTNAME(YELEMENT)
+Value Char YELEMENT
+    Local Char RESULT(250) : RESULT = YELEMENT
+    If vireblc(YELEMENT,2) <> "" Then
+        Local Shortint YP
+        YP =  instr(1,YELEMENT,"~")
+        If YP > 0 Then
+           RESULT = mid$(YELEMENT,1,YP-1)
+        Endif
+    Endif
+
+End RESULT
+
+Subprog FILLERROR(TRTLIN, I, YNOL, YCH, WERRMSG)
+Value Integer TRTLIN
+Value Integer I
+Value Integer YNOL
+Value Char YCH
+Variable Char WERRMSG
+    WERRMSG = "("+num$(TRTLIN)+")"-"PARSING error at position " + num$(I) + " line: " + num$(YNOL) + " invalid character: " + YCH
+End
+
+#========================================
+Funprog XMLDATE2DATE(YXMLDATE)
+Value Char YXMLDATE
+    Local Date RESULT
+
+    #Formato in input: YYYY-MM-DD
+    Local Char RESULT(10)(99)
+    Local Integer I
+    I = func F_SPLIT(YXMLDATE,"-",RESULT)
+
+End gdat$(val(RESULT(2)),val(RESULT(1)),val(RESULT(0)))
+
+
+#========================================
+Funprog F_SPLIT(PPSTR,PDELIMITER,XXTMP)
+Value Char PPSTR        #Stringa da splittare
+Value Char PDELIMITER   #Separatore
+Variable Char XXTMP     #Array de lrisultato
+
+    Local Integer XCONTA
+    Local Integer XSTART
+    XCONTA = 0
+    XSTART = 1
+    If instr(XSTART,PPSTR,PDELIMITER) > 0 Then
+        Repeat
+            XXTMP(XCONTA) = mid$(PPSTR,XSTART,instr(XSTART,PPSTR,PDELIMITER)-XSTART)
+            XSTART = instr(XSTART,PPSTR,PDELIMITER)+1
+            XCONTA += 1
+
+        Until instr(XSTART,PPSTR,PDELIMITER) = 0
+    Endif
+
+
+    If XSTART <= len(PPSTR) Then
+        XXTMP(XCONTA) = mid$(PPSTR,XSTART,len(PPSTR)-XSTART+1)
+    Else
+        XCONTA = XCONTA - 1
+    Endif
+
+End XCONTA
+
+
+#========================================
+Funprog IS_VALID_NUMBER(PVALUE)
+Value Char PVALUE
+  Local Shortint RESULT : RESULT = 1 # 1 = OK, true
+
+  Local Shortint YNUMPUNTI
+  Local Shortint I
+  Local Char C(1)
+  PVALUE = vireblc(PVALUE,2)
+
+
+  For I = 1 To len(PVALUE)
+    C = mid$(PVALUE,I,1)
+    If C="-" Then
+      If I > 1 Then
+          RESULT = 0
+          Break
+      Endif
+    Else
+      If (ascii(C) < 48 and ascii(C) <> 32) or ascii(C) > 57  Then #introdotto ascii 32 non interrompe se trova spazio
+         If ascii(C) <> 46 Then #separatore decimale .
+            RESULT = 0
+            Break
+           Else
+            YNUMPUNTI += 1
+          Endif
+        Endif
+    Endif
+  Next
+  If YNUMPUNTI > 1 Then RESULT = 0 : Endif #Se per errori ci sono +2 caratteri .
+End RESULT
+
+#========================================
+Funprog IS_VALID_INTEGER(PVALUE)
+Value Char PVALUE
+  Local Shortint RESULT : RESULT = 1 # 1 = OK, true
+
+  Local Shortint I
+  Local Char C(1)
+  PVALUE = vireblc(PVALUE,2)
+  For I = 1 To len(PVALUE)
+    C = mid$(PVALUE,I,1)
+    If (ascii(C) < 48 and ascii(C) <> 32) or ascii(C) > 57 Then #non interrompe se trova spazio
+      RESULT = 0
+      Break
+    Endif
+  Next
+
+End RESULT
+
+#========================================
+Funprog IS_VALID_DATE(PVALUE)
+Value Char PVALUE
+  Local Shortint RESULT : RESULT = 1 # 1 = OK, true
+  If val(left$(PVALUE,4)) < 2000 or val(left$(PVALUE,4)) > 2080 Then
+    RESULT = 1
+  Elsif val(seg$(PVALUE,6,7)) < 1 or val(seg$(PVALUE,6,7)) > 12 Then
+    RESULT = 0
+  Elsif val(mid$(PVALUE,9,99)) < 1 or val(mid$(PVALUE,9,99)) > 31 Then
+    RESULT = 0
+  Endif
+End RESULT
+
+
+
+#========================================
+Funprog F_REPLACEALL(PPST1,PPST2,PPST3)
+Value Char PPST1() #Stringa origine
+Value Char PPST2() #Stringa da sostituire
+Value Char PPST3() #Nuova stringa
+  Local Char X_RET(254)
+  Local Integer XXINI, XXEND
+  Local Integer XSSS : XSSS= 0
+  X_RET = PPST1
+  XXIND = instr(1,PPST1,PPST2) - 1
+  While XXIND >= 0
+    XXEND = XXIND + len(PPST2) + 1
+    X_RET = left$(X_RET,XXIND) + PPST3 + mid$(X_RET,XXEND,999)
+    XXIND = instr(XXEND,X_RET,PPST2) - 1
+    XSSS += 1
+    If XSSS > 999 Then Break : Endif
+  Wend
+End X_RET
+
+
+Subprog REPLACEALL_CLBL(PPST1,PPST2,PPST3)
+Variable Clbfile PPST1() #Stringa origine
+Value Char PPST2() #Stringa da sostituire
+Value Char PPST3() #Nuova stringa
+
+  Local Integer XXINI, XXEND
+  Local Integer XSSS : XSSS= 0
+  XXIND = instr(1,PPST1,PPST2) - 1
+  While XXIND >= 0
+    XXEND = XXIND + len(PPST2) + 1
+    PPST1 = left$(PPST1,XXIND) + PPST3 + mid$(PPST1,XXEND,999)
+    XXIND = instr(XXEND,PPST1,PPST2) - 1
+    XSSS += 1
+    If XSSS > 999 Then Break : Endif
+  Wend
+End
+
+
+Funprog GET_DATA_FILE(PFILEPATH)
+Value Char PFILEPATH
+  Local Integer RESULT, DAYS
+  RESULT = filinfo(PFILEPATH,9)
+  DAYS = RESULT / (24 * 60 * 60 )
+  Local Date CDAT : CDAT = gdat$(1,1,1970) + DAYS
+End CDAT
+

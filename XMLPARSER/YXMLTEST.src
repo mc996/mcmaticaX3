@@ -1,0 +1,32 @@
+#
+# XML parser test program
+#
+
+
+
+Call MAIN
+
+End
+
+
+#----- XML EVENT HANDLERS
+
+Subprog MAIN()
+    Local Char PFILENAM(250), PFOLDER(250)
+    Local Integer YSTATUS
+    [L]PFOLDER = filpath("tmp", "", "")
+
+    Call COPSRV(PFILENAM,PFOLDER,YSTATUS) From ORDSYS
+    If YSTATUS = 0 Then
+
+        Local Char WERRPARSE(250)
+        Local Char YPARSEHANDLER(30)
+        YPARSEHANDLER = "YXMLHANDLER"
+        PFILENAM = PFOLDER + "\" + PFILENAM
+        Call XMLPARSE(PFILENAM, YPARSEHANDLER, WERRPARSE) From ZMC01XMLRSAX
+
+    Endif
+
+
+End
+
