@@ -1,5 +1,5 @@
 # XML PARSER
-This is a pure 4GL XML parser.  
+This is a pure SAGE X3 4GL XML parser.  
 No external application or library is needed nor database stored procedures.  
 What you need is:  
 1. the ZMC01XMLRSAX file to be copied in your folder as is. It contains the core procedure to read and parse an XML file
