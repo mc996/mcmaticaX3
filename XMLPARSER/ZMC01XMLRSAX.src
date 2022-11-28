@@ -110,6 +110,7 @@ Variable Char WERRMSG
             YPB += 1
 
             If mid$(YDOC,YPB,1) = "!" Then   #Contenuto TAG con <![CDATA[
+              YPB = instr(YPB,YDOC,"]]>")
               Goto JUMP_NEXT
             Endif
 
