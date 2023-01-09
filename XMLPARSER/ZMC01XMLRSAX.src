@@ -109,7 +109,12 @@ Variable Char WERRMSG
 
             YPB += 1
 
-            If mid$(YDOC,YPB,1) = "!" Then   #Contenuto TAG con <![CDATA[
+            If mid$(YDOC,YPB,3) = "!--" Then  #Commento
+              YPB = instr(YPB,YDOC,"-->")
+              Goto JUMP_NEXT
+            Endif
+
+            If mid$(YDOC,YPB,2) = "![" Then   #Contenuto TAG con <![CDATA[
               YPB = instr(YPB,YDOC,"]]>")
               Goto JUMP_NEXT
             Endif
