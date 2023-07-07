@@ -1,0 +1,441 @@
+###############################################################################
+#                            CORE PROCEDURES subprog read and parse an XML file
+#
+# Author: Matteo Carminati (mcarminati@mcmatica.it) 2023
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms version 3 of the GNU General Public License as published
+# by the Free Software Foundation. This program is distributed in the hope
+# that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+################################################################################
+#
+
+#**
+#* max sublevels of elemets managed
+#*!
+Funprog F_DEEPLEVEL()
+End 15
+
+#**
+#* max numbers of different elements managed
+#*!
+Funprog F_MAXELEMENT()
+End 200
+
+
+#**
+#* Main subprog
+#*
+#* @param PPATH Json file path
+#* @param PEVENTHANDLER name of the source program that manage the parsed elemets
+#* @param PPROGRESS CST_AYES -> show progress pupup, CST_ANO -> no progress popup
+#* @param WERRMSG Returning error messages
+#*!
+Subprog PARSE_JSON(PPATH, PEVENTHANDLER, PPROGRESS, WERRMSG)
+Value Char PPATH
+Value Char PEVENTHANDLER
+Value Integer PPROGRESS
+Variable Char WERRMSG
+
+  Local Clbfile YDOC(14)
+
+
+  Openi PPATH Using [FJSON]
+
+  Iomode adxirs ""  Using [FJSON]
+  Iomode adxifs ""  Using [FJSON]
+  Iomode adxium 50  Using [FJSON]
+
+  Local Integer YCONTA
+
+
+  Repeat
+    Rdseq YDOC Using [FJSON]    #Load entire file into clob
+    YCONTA += 1
+  Until fstat <> 0
+  Openi Using [FJSON]
+  If YCONTA>1 Then
+    WERRMSG = "File too big (YCONTA:" + num$(YCONTA) + ")"
+  Else
+
+    If GTRACE <> "" Then
+      Call ECR_TRACE_CLB(YDOC, 0) From YMC02JSON
+      Call ECR_TRACE("",0) From GESECRAN
+    Endif
+
+    Local Integer YLEV : YLEV = 0
+
+    Local Char YELEMENTTREE(250)(0..func F_DEEPLEVEL() )
+    Local Char YELECOUNTER(250)(func F_MAXELEMENT(), func F_DEEPLEVEL() + 1) #matrice, 0 -> massima profondita albero, nomi elementi, + 1 -> contatore elementi
+
+    Call JSONPARSE_CLB(YDOC, PEVENTHANDLER, PPROGRESS, YELEMENTTREE, YELECOUNTER, WERRMSG)
+  Endif
+End
+
+#**
+#* Inner main program
+#*
+#* @param YDOC Clob file
+#* @param PEVENTHANDLER name of the source program that manage the parsed elemets
+#* @param PPROGRESS Show/Hide progress
+#* @param YELEMENTTREE
+#* @param YELECOUNTER
+#* @param WERRMSG Returning error messages
+#*!
+Subprog JSONPARSE_CLB(YDOC, PEVENTHANDLER, PPROGRESS, YELEMENTTREE, YELECOUNTER, WERRMSG)
+Variable Clbfile YDOC
+Value Char PEVENTHANDLER
+Value Integer PPROGRESS
+Variable Char YELEMENTTREE
+Variable Char YELECOUNTER
+Variable Char WERRMSG
+
+  Local Integer I
+  Local Char YCH(1)
+  Local Integer YCOUNT, YSTOP
+
+  Local Char YA_STATUS(20)
+  Local Char YCURR_ELEMENT_NAME(50)
+  Local Char YCURR_ELEMENT_VALUE(50)
+  Local Integer INTERRUPT
+
+  If PPROGRESS = [V]CST_AYES Then
+    Call OUVRE_BOITE("JSON Parsing ", len(YDOC)) From GESECRAN : # Set Progress Bar
+    Call SET_BOITE("JSON Parsing", len(YDOC)) From GESECRAN
+  Endif
+
+
+  For I = 0 To len(YDOC)
+    YCH = mid$(YDOC,I,1)
+    If YCH = "{" Then
+      Raz [L]YCURR_ELEMENT_VALUE
+      Raz YCURR_ELEMENT_NAME
+      YA_STATUS = ""
+    Elsif YCH = '"' and YA_STATUS = ""  Then
+      YA_STATUS = "ELEMENT_NAME"
+    Elsif YCH = '"' and YA_STATUS = "ELEMENT_NAME"  Then
+      Call APPEND_T0_TREEELEMENT(YELEMENTTREE, YELECOUNTER, [L]YCURR_ELEMENT_NAME, YCOUNT)
+      YA_STATUS = ""
+    Elsif YCH = ":" Then
+      YA_STATUS = "ELEMENT_VALUE"
+    Elsif YCH = "," Then
+      If YCURR_ELEMENT_NAME <> "" Then
+        Raz YCOUNT
+        YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
+        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP )
+        If YSTOP = 1 Then
+            Break
+        Endif
+        Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
+        If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+        YA_STATUS = ""
+        Raz [L]YCURR_ELEMENT_VALUE
+        Raz YCURR_ELEMENT_NAME
+      Endif
+    Elsif YCH = "}" and YA_STATUS = "ELEMENT_VALUE" Then
+      If YCURR_ELEMENT_NAME <> "" Then
+        Raz YCOUNT
+        YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
+        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP )
+        If YSTOP = 1 Then
+            Break
+        Endif
+        Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_AYES, WERRMSG)
+        If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+      Else
+        Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
+        If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+      Endif
+
+      YA_STATUS = ""
+      Raz [L]YCURR_ELEMENT_VALUE
+      Raz YCURR_ELEMENT_NAME
+    Elsif YCH = "}" Then
+      Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
+      If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+    Elsif YCH = "[" Then
+    Elsif YCH = "]" and YA_STATUS = "" Then
+      Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
+      If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+    Else
+      If YA_STATUS = "ELEMENT_NAME" Then
+        YCURR_ELEMENT_NAME += YCH
+      Elsif YA_STATUS = "ELEMENT_VALUE" Then
+        YCURR_ELEMENT_VALUE += YCH
+      Endif
+    Endif
+    If PPROGRESS = [V]CST_AYES Then
+      Call AFF_BOITE("Element: "-num$(YCURR_ELEMENT_NAME),I,INTERRUPT) From GESECRAN
+    Endif
+    If [L]INTERRUPT = 1 Then Break : Endif
+  Next
+
+  If PPROGRESS = [V]CST_AYES Then
+    Call FERME_BOITE From GESECRAN
+  Endif
+
+End
+
+
+
+#**
+#* Raise the end event for the json element,
+#* by calling the action YPARSING of the handler program
+#*
+#* @param PEVENTHANDLER name of the source program that manage the parsed elemets
+#* @param PURI
+#* @param PELEMENT
+#* @param PVALUE_CLB
+#* @param PCOUNT
+#* @param PSTOP
+#*!
+Subprog RAISE_END_ELEMENT(PEVENTHANDLER, PURI, PELEMENT, PVALUE_CLB, PCOUNT, PSTOP)
+Value Char PEVENTHANDLER
+Value Char PURI()
+Value Char PELEMENT
+Variable Clbfile PVALUE_CLB
+Value Integer PCOUNT
+Variable Integer PSTOP
+
+    Local Char YEVENT(20) : YEVENT = "END_ELEMENT"
+
+    Local Char PVALUE(254) : PVALUE = PVALUE_CLB
+
+    PVALUE = vireblc(PVALUE,2)
+    If left$(PVALUE, 1) = '"' Then
+      PVALUE = mid$(PVALUE,2,len(PVALUE))
+    Endif
+    If right$(PVALUE, len(PVALUE)) = '"' Then
+      PVALUE = mid$(PVALUE,1,len(PVALUE)-1)
+    Endif
+
+    #Infbox "PURI:"+func PURI2STR(PURI)-"PELEMENT:"+PELEMENT-"PVALUE:"+PVALUE-"PCOUNT:"+num$(PCOUNT)
+
+    Gosub YPARSING From =PEVENTHANDLER
+End
+
+
+Funprog PURI2STR(PURI)
+Value Char PURI
+  Local Char YRESULT(250)
+  Local Integer I
+  While PURI(I) <> "" and I < dim(PURI)-1
+    If YRESULT <> "" Then YRESULT +="~" : Endif
+    [L]YRESULT += PURI(I)
+    I += 1
+  Wend
+End YRESULT
+
+Subprog REMOVE_LAST_TREEELEMENT(WELEMENTTREE, WERRMSG)
+Variable Char WELEMENTTREE
+Variable Char WERRMSG
+
+  Local Integer I: I = 0
+
+  I = func LASTINDEX(WELEMENTTREE)
+
+  Raz WELEMENTTREE(I)
+
+End
+
+
+Subprog REMOVE_FROM_TREEELEMENT(WELEMENTTREE, YCURRELEMENT, YANDPARENT, WERRMSG)
+Variable Char WELEMENTTREE
+Value Char YCURRELEMENT
+Value Integer YANDPARENT
+Variable Char WERRMSG
+
+    Local Integer I: I = 0
+
+    I = func LASTINDEX(WELEMENTTREE)
+
+    #If func GETELEMENTNAME(WELEMENTTREE(I)) = YCURRELEMENT Then
+    If WELEMENTTREE(I) = YCURRELEMENT Then
+        Raz WELEMENTTREE(I)
+        If YANDPARENT = [V]CST_AYES and I > 0 Then
+          Raz WELEMENTTREE(I-1)
+        Endif
+    Else
+#        Call ERREUR("Element '" + YCURRELEMENT + "' not closed correctly") From GESECRAN
+        WERRMSG = "Element '" + YCURRELEMENT + "' not closed correctly"
+    Endif
+End
+
+Subprog APPEND_T0_TREEELEMENT(WELEMENTTREE, WELECOUNTER, YCURRELEMENT, WCOUNT)
+Variable Char WELEMENTTREE
+Variable Char WELECOUNTER
+Value Char YCURRELEMENT
+Variable Integer WCOUNT
+
+    Local Integer I: I = -1
+    Repeat
+        I+=1
+    Until vireblc(WELEMENTTREE(I),4) = ""
+    WELEMENTTREE(I) = YCURRELEMENT
+    Call UPDATECOUNTER(WELEMENTTREE, WELECOUNTER, WCOUNT)
+
+End
+
+Subprog UPDATECOUNTER(WELEMENTTREE, WELECOUNTER, WCOUNT)
+Variable Char WELEMENTTREE
+Variable Char WELECOUNTER
+Variable Integer WCOUNT
+
+    Local Integer I: I = 0
+    Local Integer J
+    Local Char CURRELEMENT(250)
+    Local Shortint TROVATO : Raz TROVATO
+    While WELECOUNTER(I,0)<>""
+
+
+        TROVATO =1
+        J = 0
+        While WELEMENTTREE(J) <> ""
+            If WELEMENTTREE(J) <> WELECOUNTER(I, J) Then
+                Raz TROVATO
+                Break
+            Endif
+            J+=1
+            If J >= dim(WELEMENTTREE)  Then
+                Break
+            Endif
+
+        Wend
+        If TROVATO = 1 Then
+            If WELECOUNTER(I, J) = "" Then
+                WCOUNT = val(WELECOUNTER(I, func F_DEEPLEVEL())) + 1
+                WELECOUNTER(I, func F_DEEPLEVEL()) = num$(WCOUNT)
+                End
+            Else
+
+            Endif
+        Endif
+        I+=1
+    Wend
+
+    If TROVATO <> 1 Then
+        J=0
+        While WELEMENTTREE(J) <> ""
+            WELECOUNTER(I, J) = WELEMENTTREE(J) #CURRELEMENT
+            J+=1
+        Wend
+        WCOUNT = 1
+        WELECOUNTER(I, func F_DEEPLEVEL()) = num$(WCOUNT)
+    Endif
+
+
+
+End
+
+Funprog COUNT_ELEMENT(WELEMENTTREE, WELECOUNTER)
+Variable Char WELEMENTTREE
+Variable Char WELECOUNTER
+
+
+
+    Local Integer I: I = 0
+    Local Integer J
+    Local Integer RESULT : RESULT = 0
+    Local Char CURRELEMENT(250)
+    Local Shortint TROVATO : Raz TROVATO
+    Repeat
+        TROVATO =1
+        J = 0
+        While WELEMENTTREE(J) <> ""
+            If WELEMENTTREE(J) <> WELECOUNTER(I, J) Then
+                Raz TROVATO
+                Break
+            Endif
+            J+=1
+            If J >= dim(WELEMENTTREE)  Then
+                Break
+            Endif
+
+        Wend
+        If TROVATO = 1 Then
+            If WELECOUNTER(I, J) = "" Then
+                RESULT = val(WELECOUNTER(I, func F_DEEPLEVEL()))
+
+            Endif
+        Endif
+        I+=1
+    Until WELECOUNTER(I,0) = "" | RESULT > 0
+
+End RESULT
+
+Funprog LASTINDEX(WELEMENTTREE)
+Value Char WELEMENTTREE
+
+    Local Integer I: I = 0
+    While WELEMENTTREE(I) <> ""
+        I+=1
+    Wend
+    If I >= 1 Then
+        I -= 1
+    Endif
+
+End I
+
+
+Funprog FIND_NEXT_CHAR(YDOC, PBEGIN, PCHAR)
+Variable Clbfile YDOC
+Value Integer PBEGIN
+Value Char PCHAR
+
+  Local Integer I
+  For I = PBEGIN To len(YDOC)
+    If ascii(mid$(YDOC,I,1)) <> 32 Then
+      If mid$(YDOC,I,1) = PCHAR Then
+        End I
+      Endif
+    Endif
+  Next
+End 0
+
+
+#**
+#* scrive il clob nella traccia
+#*
+#* @param WCLB
+#* @param PSTATUS
+#*!
+Subprog ECR_TRACE_CLB(WCLB, PSTATUS)
+Variable Clbfile WCLB
+Value Integer PSTATUS
+
+
+  Local Char YCHR(1)
+  Local Char YROW(250)
+  Local Integer I
+  Local Integer Y
+
+  For I=1 To len(WCLB)
+    Y+=1
+    YCHR = mid$(WCLB,I,1)
+    If ascii(YCHR) = 10 or ascii(YCHR) = 13  Then
+      If vireblc(YROW,2)<>"" Then
+        Call ECR_TRACE(YROW, PSTATUS) From GESECRAN
+      Endif
+      YROW = ""
+      Y = 0
+    Elsif ascii(YCHR) = 92 Then #carattere "/"
+    Else
+      YROW += YCHR
+    Endif
+    If Y >= 77 Then
+      If vireblc(YROW,2)<>"" Then
+        Call ECR_TRACE(YROW, PSTATUS) From GESECRAN
+      Endif
+      YROW = ""
+      Y = 0
+    Endif
+  Next
+
+  If vireblc(YROW,2)<>"" Then
+    Call ECR_TRACE(YROW, PSTATUS) From GESECRAN
+  Endif
+End
+

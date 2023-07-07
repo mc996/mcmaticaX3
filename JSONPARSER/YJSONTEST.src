@@ -1,0 +1,33 @@
+#
+# JSON parser test program
+#
+
+
+
+Call MAIN
+Infbox "End !!"
+
+End
+
+
+#----- JSON EVENT HANDLERS
+
+Subprog MAIN()
+    Local Char PFILENAM(250), PFOLDER(250)
+    Local Integer YSTATUS
+    [L]PFOLDER = filpath("tmp", "", "")
+
+    Call COPSRV(PFILENAM,PFOLDER,YSTATUS) From ORDSYS
+    If YSTATUS = 0 Then
+
+        Local Char WERRPARSE(250)
+        Local Char YPARSEHANDLER(30)
+        YPARSEHANDLER = "YJSONHANDLER"
+        PFILENAM = PFOLDER + "\" + PFILENAM
+        Call PARSE_JSON(PFILENAM, YPARSEHANDLER, [V]CST_AYES, WERRPARSE) From ZMC02JSON
+
+    Endif
+
+
+End
+

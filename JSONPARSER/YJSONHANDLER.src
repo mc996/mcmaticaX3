@@ -1,0 +1,37 @@
+
+
+#**
+#* ! Mandatory ! called by the ZMC01XMLRSAX
+#*
+#* Main event handler
+#*
+#*!
+$YPARSING
+    Case YEVENT
+        When "END_ELEMENT" : Gosub END_ELEMENT
+    Endcase
+Return
+
+
+######################################
+$END_ELEMENT
+
+  #PURI: array that define the URI of the tag element
+  #PELEMENT: name of the element
+  #PCOUNT: counter of the element
+  #PSTOP: Set to 1 to stop parsing and exit
+  #PVALUE: tag inner value
+
+  Local Char YURITXT(250) : YURITXT=""
+  Local Integer I
+  While PURI(I) <> ""
+    If YURITXT <> "" Then YURITXT += ">" : Endif
+    YURITXT += PURI(I)
+    I+=1
+  Wend
+
+  Infbox "PURI:"+YURITXT-"PELEMENT:"+PELEMENT-"PCOUNT:"+num$(PCOUNT)-"PVALUE:"+PVALUE
+
+
+Return
+
