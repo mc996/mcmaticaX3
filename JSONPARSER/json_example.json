@@ -3,6 +3,11 @@
   "count": 10,
   "created": "2011-06-21T08:10:46Z",
   "lang": "en-US",
+  "VALUES": [
+    "Value1",
+    "Value2",
+    {"hello":"world"}
+  ],
   "results": {
    "photo": [   
     {
