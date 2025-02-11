@@ -101,6 +101,7 @@ Variable Char WERRMSG
   Local Char YARRAY(50)(99)
   Local Char YCURR_ELEMENT_NAME(50)
   Local Char YCURR_ELEMENT_VALUE(50)
+  Local Char YCURR_NON_OBJ_VALUE(50)
   Local Integer INTERRUPT
 
   If PPROGRESS = [V]CST_AYES Then
@@ -113,7 +114,8 @@ Variable Char WERRMSG
     YCH = mid$(YDOC,I,1)
     If YCH = "{" Then
       Raz [L]YCURR_ELEMENT_VALUE
-      Raz YCURR_ELEMENT_NAME
+      Raz [L]YCURR_ELEMENT_NAME
+      Raz [L]YCURR_NON_OBJ_VALUE
       YA_STATUS = ""
     Elsif YCH = '"' and YA_STATUS = ""  Then
       YA_STATUS = "ELEMENT_NAME"
@@ -128,7 +130,7 @@ Variable Char WERRMSG
     Elsif YCH = ":" Then
       YA_STATUS = "ELEMENT_VALUE"
     Elsif YCH = "," Then
-      If YCURR_ELEMENT_NAME <> "" Then
+      If YCURR_ELEMENT_NAME <> "" and YA_STATUS = "ELEMENT_VALUE" Then
         Raz YCOUNT
         YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
         Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP )
@@ -138,42 +140,70 @@ Variable Char WERRMSG
         Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
         If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
         YA_STATUS = ""
-        Raz [L]YCURR_ELEMENT_VALUE
-        Raz YCURR_ELEMENT_NAME
-      Elsif [L]YCURR_ELEMENT_VALUE <> "" Then
-        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP )
-        If YSTOP = 1 Then
-            Break
-        Endif
-      Endif
-    Elsif YCH = "}" and YA_STATUS = "ELEMENT_VALUE" Then
-      If YCURR_ELEMENT_NAME <> "" Then
+     Elsif YCURR_ELEMENT_NAME <> "" and YA_STATUS = "ELEMENT_NAME" Then
         Raz YCOUNT
         YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
-        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP )
+        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, num$(YCOUNT), YCURR_ELEMENT_NAME, YCOUNT, YSTOP )
         If YSTOP = 1 Then
             Break
         Endif
-        If max([L]YARRAY) = "" Then
-          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_AYES, WERRMSG)
-        Else
-          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
-        Endif
+        Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
         If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
         YA_STATUS = ""
-        Raz [L]YCURR_ELEMENT_VALUE
-        Raz YCURR_ELEMENT_NAME
-      Else
-        Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
-        If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+      Elsif YCURR_NON_OBJ_VALUE <> "" Then
+        Raz YCOUNT
+        YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
+        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, num$(YCOUNT), YCURR_NON_OBJ_VALUE, YCOUNT, YSTOP )
+        If YSTOP = 1 Then
+            Break
+        Endif
       Endif
-      YA_STATUS = ""
       Raz [L]YCURR_ELEMENT_VALUE
-      Raz YCURR_ELEMENT_NAME
+      Raz [L]YCURR_ELEMENT_NAME
+      Raz [L]YCURR_NON_OBJ_VALUE
+      Raz [L]YA_STATUS
+    Elsif YCH = "}"
+      If YA_STATUS = "ELEMENT_VALUE" Then
+        If YCURR_ELEMENT_NAME <> "" Then
+          Raz YCOUNT
+          YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
+          Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP )
+          If YSTOP = 1 Then
+              Break
+          Endif
+          If max([L]YARRAY) = "" Then
+            Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_AYES, WERRMSG)
+          Else
+            Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
+          Endif
+          If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+        Else
+          Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
+          If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+        Endif
+        YA_STATUS = ""
+        Raz [L]YCURR_ELEMENT_VALUE
+        Raz [L]YCURR_NON_OBJ_VALUE
+        Raz [L]YCURR_ELEMENT_NAME
+      Endif
     Elsif YCH = "[" Then
       Z= 0 : While [L]YARRAY(Z)<>""  Z += 1 Wend
       YARRAY(Z) = "A~"+[L]YCURR_ELEMENT_NAME
+      Raz [L]YCURR_ELEMENT_NAME
+      Raz [L]YCURR_NON_OBJ_VALUE
+      Raz [L]YCURR_ELEMENT_VALUE
+      YA_STATUS = ""
     Elsif YCH = "]"  Then
+      If YCURR_ELEMENT_NAME <> "" and YA_STATUS = "ELEMENT_NAME" Then
+        Raz YCOUNT
+        YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
+        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, num$(YCOUNT), YCURR_ELEMENT_NAME, YCOUNT, YSTOP )
+        If YSTOP = 1 Then
+            Break
+        Endif
+        Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
+        If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+      Endif
       Z= 0 : While [L]YARRAY(Z)<>""  Z += 1 Wend
       If Z > 0 Then
         If vireblc(mid$(YARRAY(Z-1),3,999),2) <> "" Then
@@ -182,9 +212,17 @@ Variable Char WERRMSG
         Endif
         YARRAY(Z-1)=""
       Endif
+      Raz [L]YCURR_ELEMENT_NAME
+      Raz [L]YCURR_NON_OBJ_VALUE
+      Raz [L]YCURR_ELEMENT_VALUE
+      YA_STATUS = ""
     Else
       If YA_STATUS = "ELEMENT_VALUE" Then
-        YCURR_ELEMENT_VALUE += YCH
+        [L]YCURR_ELEMENT_VALUE += YCH
+      Else
+        If YCH <> " " Then
+          YCURR_NON_OBJ_VALUE += YCH
+        Endif
       Endif
     Endif
     If PPROGRESS = [V]CST_AYES Then
