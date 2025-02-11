@@ -93,11 +93,12 @@ Variable Char YELEMENTTREE
 Variable Char YELECOUNTER
 Variable Char WERRMSG
 
-  Local Integer I
+  Local Integer I, J, Z
   Local Char YCH(1)
   Local Integer YCOUNT, YSTOP
 
   Local Char YA_STATUS(20)
+  Local Char YARRAY(50)(99)
   Local Char YCURR_ELEMENT_NAME(50)
   Local Char YCURR_ELEMENT_VALUE(50)
   Local Integer INTERRUPT
@@ -107,7 +108,7 @@ Variable Char WERRMSG
     Call SET_BOITE("JSON Parsing", len(YDOC)) From GESECRAN
   Endif
 
-
+  Raz YARRAY
   For I = 0 To len(YDOC)
     YCH = mid$(YDOC,I,1)
     If YCH = "{" Then
@@ -116,9 +117,14 @@ Variable Char WERRMSG
       YA_STATUS = ""
     Elsif YCH = '"' and YA_STATUS = ""  Then
       YA_STATUS = "ELEMENT_NAME"
-    Elsif YCH = '"' and YA_STATUS = "ELEMENT_NAME"  Then
+      J = instr(I+1,YDOC,'"')
+      [L]YCURR_ELEMENT_NAME = mid$(YDOC,I+1,J-I-1)
       Call APPEND_T0_TREEELEMENT(YELEMENTTREE, YELECOUNTER, [L]YCURR_ELEMENT_NAME, YCOUNT)
-      YA_STATUS = ""
+      I = J
+    Elsif YCH = '"' and YA_STATUS = "ELEMENT_VALUE"  Then
+      J = instr(I+1,YDOC,'"')
+      YCURR_ELEMENT_VALUE = mid$(YDOC,I+1,J-I-1)
+      I = J
     Elsif YCH = ":" Then
       YA_STATUS = "ELEMENT_VALUE"
     Elsif YCH = "," Then
@@ -134,6 +140,11 @@ Variable Char WERRMSG
         YA_STATUS = ""
         Raz [L]YCURR_ELEMENT_VALUE
         Raz YCURR_ELEMENT_NAME
+      Elsif [L]YCURR_ELEMENT_VALUE <> "" Then
+        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_VALUE, YCOUNT, YSTOP )
+        If YSTOP = 1 Then
+            Break
+        Endif
       Endif
     Elsif YCH = "}" and YA_STATUS = "ELEMENT_VALUE" Then
       If YCURR_ELEMENT_NAME <> "" Then
@@ -143,27 +154,36 @@ Variable Char WERRMSG
         If YSTOP = 1 Then
             Break
         Endif
-        Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_AYES, WERRMSG)
+        If max([L]YARRAY) = "" Then
+          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_AYES, WERRMSG)
+        Else
+          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
+        Endif
         If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+        YA_STATUS = ""
+        Raz [L]YCURR_ELEMENT_VALUE
+        Raz YCURR_ELEMENT_NAME
       Else
         Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
         If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
       Endif
-
       YA_STATUS = ""
       Raz [L]YCURR_ELEMENT_VALUE
       Raz YCURR_ELEMENT_NAME
-    Elsif YCH = "}" Then
-      Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
-      If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
     Elsif YCH = "[" Then
-    Elsif YCH = "]" and YA_STATUS = "" Then
-      Call REMOVE_LAST_TREEELEMENT(YELEMENTTREE, WERRMSG)
-      If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+      Z= 0 : While [L]YARRAY(Z)<>""  Z += 1 Wend
+      YARRAY(Z) = "A~"+[L]YCURR_ELEMENT_NAME
+    Elsif YCH = "]"  Then
+      Z= 0 : While [L]YARRAY(Z)<>""  Z += 1 Wend
+      If Z > 0 Then
+        If vireblc(mid$(YARRAY(Z-1),3,999),2) <> "" Then
+          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, vireblc(mid$(YARRAY(Z-1),3,999),2), [V]CST_ANO, WERRMSG)
+          If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+        Endif
+        YARRAY(Z-1)=""
+      Endif
     Else
-      If YA_STATUS = "ELEMENT_NAME" Then
-        YCURR_ELEMENT_NAME += YCH
-      Elsif YA_STATUS = "ELEMENT_VALUE" Then
+      If YA_STATUS = "ELEMENT_VALUE" Then
         YCURR_ELEMENT_VALUE += YCH
       Endif
     Endif
@@ -438,4 +458,3 @@ Value Integer PSTATUS
     Call ECR_TRACE(YROW, PSTATUS) From GESECRAN
   Endif
 End
-
