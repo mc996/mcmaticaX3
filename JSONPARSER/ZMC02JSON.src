@@ -92,8 +92,8 @@ Variable Char WERRMSG
 
 
     If GTRACE <> "" Then
-      Call ECR_TRACE_CLB(PDOC, 0) From ZMC02JSON
-      Call ECR_TRACE("",0) From GESECRAN
+      #Call ECR_TRACE_CLB(PDOC, 0) From ZMC02JSON
+      #Call ECR_TRACE("",0) From GESECRAN
     Endif
 
     Local Integer YLEV : YLEV = 0
@@ -129,10 +129,11 @@ Variable Char WERRMSG
   Local Integer YCOUNT, YSTOP
 
   Local Char YA_STATUS(20)
-  Local Char YARRAY(50)(99)
-  Local Char YCURR_ELEMENT_NAME(50)
-  Local Char YCURR_ELEMENT_VALUE(50)
-  Local Char YCURR_NON_OBJ_VALUE(50)
+  Local Char YARRAY(100)(99)
+  Local Char YCURR_ELEMENT_NAME(100)
+  #Local Clbfile YCURR_ELEMENT_NAME(1)
+  Local Clbfile YCURR_ELEMENT_VALUE(1)
+  Local Clbfile YCURR_NON_OBJ_VALUE(1)
   Local Integer INTERRUPT
 
   If PPROGRESS = [V]CST_AYES Then
@@ -142,7 +143,7 @@ Variable Char WERRMSG
 
   Local Char YEVENT(20) : YEVENT = "BEGIN_PARSING"
   Gosub YPARSING From =PEVENTHANDLER
-
+#Infbox "len(YDOC)"-num$(len(YDOC))
   Raz YARRAY
   For I = 0 To len(YDOC)
     YCH = mid$(YDOC,I,1)
@@ -160,6 +161,11 @@ Variable Char WERRMSG
     Elsif YCH = '"' and YA_STATUS = "ELEMENT_VALUE"  Then
       J = instr(I+1,YDOC,'"')
       YCURR_ELEMENT_VALUE = mid$(YDOC,I+1,J-I-1)
+      I = J
+    Elsif YCH = '"' and YA_STATUS = "ARRAY"  Then
+      #[L]YCURR_ELEMENT_NAME = mid$(YDOC,I+1,J-I-1)
+      J = instr(I+1,YDOC,'"')
+      YCURR_NON_OBJ_VALUE = mid$(YDOC,I+1,J-I-1)
       I = J
     Elsif YCH = ":" Then
       YA_STATUS = "ELEMENT_VALUE"
@@ -222,30 +228,40 @@ Variable Char WERRMSG
       Endif
     Elsif YCH = "[" Then
       Z= 0 : While [L]YARRAY(Z)<>""  Z += 1 Wend
+# Infbox "A~"+[L]YCURR_ELEMENT_NAME
       YARRAY(Z) = "A~"+[L]YCURR_ELEMENT_NAME
       Raz [L]YCURR_ELEMENT_NAME
       Raz [L]YCURR_NON_OBJ_VALUE
       Raz [L]YCURR_ELEMENT_VALUE
-      YA_STATUS = ""
+      YA_STATUS = "ARRAY"
     Elsif YCH = "]"  Then
-      If YCURR_ELEMENT_NAME <> "" and YA_STATUS = "ELEMENT_NAME" Then
+      #If YCURR_ELEMENT_NAME <> "" and YA_STATUS = "ELEMENT_NAME" Then
+      If YA_STATUS = "ARRAY" Then
+        Z= 0 : While [L]YARRAY(Z)<>""  Z += 1 Wend
+        If Z > 0 Then
+          YCURR_ELEMENT_NAME = vireblc(mid$(YARRAY(Z-1),3,999),2)
+          YARRAY(Z-1)=""
+        Endif
+
+#Infbox "247 YCURR_ELEMENT_NAME"-YCURR_ELEMENT_NAME
         Raz YCOUNT
         YCOUNT = func COUNT_ELEMENT(YELEMENTTREE, YELECOUNTER)
-        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_ELEMENT_NAME, YCOUNT, YSTOP )
+        Call RAISE_END_ELEMENT(PEVENTHANDLER, YELEMENTTREE, YCURR_ELEMENT_NAME, YCURR_NON_OBJ_VALUE, YCOUNT, YSTOP )
         If YSTOP = 1 Then
             Break
         Endif
         Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, YCURR_ELEMENT_NAME, [V]CST_ANO, WERRMSG)
         If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
       Endif
-      Z= 0 : While [L]YARRAY(Z)<>""  Z += 1 Wend
-      If Z > 0 Then
-        If vireblc(mid$(YARRAY(Z-1),3,999),2) <> "" Then
-          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, vireblc(mid$(YARRAY(Z-1),3,999),2), [V]CST_ANO, WERRMSG)
-          If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
-        Endif
-        YARRAY(Z-1)=""
-      Endif
+#      Z= 0 : While [L]YARRAY(Z)<>""  Z += 1 Wend
+#      If Z > 0 Then
+#        If vireblc(mid$(YARRAY(Z-1),3,999),2) <> "" Then
+#Infbox "254 REMOVE"-vireblc(mid$(YARRAY(Z-1),3,999),2)
+#          Call REMOVE_FROM_TREEELEMENT(YELEMENTTREE, vireblc(mid$(YARRAY(Z-1),3,999),2), [V]CST_ANO, WERRMSG)
+#          If [L]WERRMSG <> "" Then Call ERREUR([L]WERRMSG) From GESECRAN : Endif
+#        Endif
+#        YARRAY(Z-1)=""
+#      Endif
       Raz [L]YCURR_ELEMENT_NAME
       Raz [L]YCURR_NON_OBJ_VALUE
       Raz [L]YCURR_ELEMENT_VALUE
@@ -298,18 +314,30 @@ Variable Integer PSTOP
 
     Local Char YEVENT(20) : YEVENT = "END_ELEMENT"
 
+#    Local Char PVALUE(254) : PVALUE = PVALUE_CLB
+#
+#    PVALUE = vireblc(PVALUE,2)
+#    If left$(PVALUE, 1) = '"' Then
+#      PVALUE = mid$(PVALUE,2,len(PVALUE))
+#    Endif
+#    If right$(PVALUE, len(PVALUE)) = '"' Then
+#      PVALUE = mid$(PVALUE,1,len(PVALUE)-1)
+#    Endif
+
+    PVALUE_CLB = vireblc(PVALUE_CLB,2)
+    If left$(PVALUE_CLB, 1) = '"' Then
+      PVALUE_CLB = mid$(PVALUE_CLB,2,len(PVALUE_CLB))
+    Endif
+    If right$(PVALUE_CLB, len(PVALUE_CLB)) = '"' Then
+      PVALUE_CLB = mid$(PVALUE_CLB,1,len(PVALUE_CLB)-1)
+    Endif
+
     Local Char PVALUE(254) : PVALUE = PVALUE_CLB
 
-    PVALUE = vireblc(PVALUE,2)
-    If left$(PVALUE, 1) = '"' Then
-      PVALUE = mid$(PVALUE,2,len(PVALUE))
-    Endif
-    If right$(PVALUE, len(PVALUE)) = '"' Then
-      PVALUE = mid$(PVALUE,1,len(PVALUE)-1)
-    Endif
-
     #Infbox "PURI:"+func PURI2STR(PURI)-"PELEMENT:"+PELEMENT-"PVALUE:"+PVALUE-"PCOUNT:"+num$(PCOUNT)
-
+#If mid$(func PURI2STR(PURI),1,3) = "ZPL" Then
+#Infbox "len(PVALUE_CLB)"-num$(len(PVALUE_CLB))
+#Endif
     Gosub YPARSING From =PEVENTHANDLER
 End
 
