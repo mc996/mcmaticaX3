@@ -1,3 +1,4 @@
+#<AdxTL>@(#)0.0.0.0 $Revision$
 ###############################################################################
 #                            CORE PROCEDURES to read and parse a JSON document
 #
@@ -58,7 +59,7 @@ End 200
 #* @param PPROGRESS      - CST_AYES -> mostra progress, CST_ANO -> no
 #* @param WERRMSG        - messaggi di errore in uscita
 #*!
-Subprog S_PARSE_JSON_FILE(PPATH, PEVENTHANDLER, PPROGRESS, WERRMSG)
+Subprog PARSE_JSON_FILE(PPATH, PEVENTHANDLER, PPROGRESS, WERRMSG)
 Value Char PPATH
 Value Char PEVENTHANDLER
 Value Integer PPROGRESS
@@ -89,7 +90,7 @@ Variable Char WERRMSG
     YDOC = ctrans(YDOC, chr$(10), " ")
     YDOC = ctrans(YDOC, chr$(13), " ")
 
-    Call S_PARSE_JSON_CLB(YDOC, PEVENTHANDLER, PPROGRESS, WERRMSG)
+    Call PARSE_JSON_CLB(YDOC, PEVENTHANDLER, PPROGRESS, WERRMSG)
   Endif
 
 End
@@ -103,7 +104,7 @@ End
 #* @param PPROGRESS      - CST_AYES -> mostra progress, CST_ANO -> no
 #* @param WERRMSG        - messaggi di errore in uscita
 #*!
-Subprog S_PARSE_JSON_CLB(PDOC, PEVENTHANDLER, PPROGRESS, WERRMSG)
+Subprog PARSE_JSON_CLB(PDOC, PEVENTHANDLER, PPROGRESS, WERRMSG)
 Value Clbfile PDOC
 Value Char PEVENTHANDLER
 Value Integer PPROGRESS
@@ -597,25 +598,4 @@ Variable Char WELECOUNTER
   Until WELECOUNTER(I,0) = "" | RESULT > 0
 
 End RESULT
-
-
-#**
-#* Unisce gli elementi di un array in una stringa con separatore
-#*
-#* @param PARRAY  - array di stringhe da unire
-#* @param PSTR    - separatore
-#*!
-Funprog JOIN_ARRAY(PARRAY, PSTR)
-Value Char PARRAY()
-Value Char PSTR
-
-  Local Char YRESULT(250) : YRESULT = ""
-  Local Integer I
-  While I <= dim(PARRAY) and PARRAY(I) <> ""
-    If YRESULT <> "" Then YRESULT += PSTR : Endif
-    YRESULT += PARRAY(I)
-    I += 1
-  Wend
-
-End YRESULT
 
